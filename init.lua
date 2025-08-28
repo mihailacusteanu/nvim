@@ -24,7 +24,7 @@ require("lazy").setup({
   { "williamboman/mason.nvim", config = true },
   { "williamboman/mason-lspconfig.nvim", config = function()
       require("mason-lspconfig").setup({
-        ensure_installed = { "elixirls", "pyright", "ruff" }, -- elixir + python
+        ensure_installed = { "elixirls", "pyright", "ruff", "ts_ls", "eslint", "tailwindcss" }, -- elixir + python
       })
     end
   },
@@ -34,6 +34,8 @@ require("lazy").setup({
     config = function()
       require("elixir_ls")   -- ~/.config/nvim/lua/elixir_ls.lua
       require("python_ls")   -- ~/.config/nvim/lua/python_ls.lua
+      require("javascript_ls")
+      require("tailwind_ls") -- ~/.config/nvim/lua/tailwind_ls.lua
     end
   },
 
@@ -42,38 +44,66 @@ require("lazy").setup({
     build = ":TSUpdate",
     config = function()
       require("nvim-treesitter.configs").setup({
-        ensure_installed = { "elixir", "eex", "heex", "lua", "vim", "python" },
+        ensure_installed = { "elixir", "eex", "heex", "lua", "vim", "python",
+		"javascript", "typescript", "tsx", "json", "css", "html"
+				},
         highlight = { enable = true },
         indent    = { enable = true },
       })
     end
   },
 
-  -- Completion
-  { "hrsh7th/nvim-cmp",
-    dependencies = {
-      "hrsh7th/cmp-nvim-lsp",
-      "hrsh7th/cmp-buffer",
-      "hrsh7th/cmp-path",
-    },
-    config = function()
-      local cmp = require("cmp")
-      cmp.setup({
-        sources = cmp.config.sources({
-          { name = "nvim_lsp" },
-          { name = "buffer" },
-          { name = "path" },
-        }),
-        mapping = cmp.mapping.preset.insert({
-          ["<C-Space>"] = cmp.mapping.complete(),
-          ["<CR>"]      = cmp.mapping.confirm({ select = true }),
-        }),
-        snippet = {
-          expand = function(args) vim.snippet.expand(args.body) end,
-        },
-      })
-    end
+-- Completion
+{ "hrsh7th/nvim-cmp",
+  dependencies = {
+    "hrsh7th/cmp-nvim-lsp",
+    "hrsh7th/cmp-buffer",
+    "hrsh7th/cmp-path",
+    "L3MON4D3/LuaSnip",              -- snippet engine
+    "rafamadriz/friendly-snippets",  -- pre-made snippets (React, etc.)
   },
+  config = function()
+    local cmp = require("cmp")
+    local luasnip = require("luasnip")
+
+    -- Load VSCode-style snippets (friendly-snippets)
+    require("luasnip.loaders.from_vscode").lazy_load()
+
+    cmp.setup({
+      snippet = {
+        expand = function(args) luasnip.lsp_expand(args.body) end,
+      },
+      mapping = cmp.mapping.preset.insert({
+        ["<C-Space>"] = cmp.mapping.complete(),
+        ["<CR>"]      = cmp.mapping.confirm({ select = true }),
+        ["<Tab>"]     = cmp.mapping(function(fallback)
+          if cmp.visible() then
+            cmp.select_next_item()
+          elseif luasnip.expand_or_jumpable() then
+            luasnip.expand_or_jump()
+          else
+            fallback()
+          end
+        end, { "i", "s" }),
+        ["<S-Tab>"]   = cmp.mapping(function(fallback)
+          if cmp.visible() then
+            cmp.select_prev_item()
+          elseif luasnip.jumpable(-1) then
+            luasnip.jump(-1)
+          else
+            fallback()
+          end
+        end, { "i", "s" }),
+      }),
+      sources = cmp.config.sources({
+        { name = "nvim_lsp" },
+        { name = "buffer" },
+        { name = "path" },
+        { name = "luasnip" }, -- enable snippets as a source
+      }),
+    })
+  end
+},
 
   -- Colorscheme (Catppuccin)
   { "catppuccin/nvim", name = "catppuccin", lazy = false, priority = 1000,
@@ -102,7 +132,7 @@ require("lazy").setup({
       })
 
       vim.keymap.set("n", "<C-n>", function()
-        require("nvim-tree.api").tree.toggle()
+--        require("nvim-tree.api").tree.toggle()
       end, { noremap = true, silent = true, desc = "Toggle file tree" })
     end
   },
@@ -165,6 +195,25 @@ require("lazy").setup({
     require("nvim-autopairs").setup({})
   end
 },
+	{ "stevearc/conform.nvim",
+  config = function()
+    require("conform").setup({
+      formatters_by_ft = {
+        javascript = { "prettier" },
+        typescript = { "prettier" },
+        javascriptreact = { "prettier" },
+        typescriptreact = { "prettier" },
+        json = { "prettier" },
+        css = { "prettier" },
+        html = { "prettier" },
+      },
+    })
+
+    vim.keymap.set("n", "<leader>f", function()
+      require("conform").format({ async = true })
+    end, { desc = "Format buffer" })
+  end
+}
 
 })
 
