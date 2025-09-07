@@ -1,4 +1,3 @@
--- Leader keys
 vim.g.mapleader = " "
 vim.g.maplocalleader = ","
 
@@ -213,7 +212,59 @@ require("lazy").setup({
       require("conform").format({ async = true })
     end, { desc = "Format buffer" })
   end
+},
+	{
+  "zbirenbaum/copilot.lua",
+  event = "InsertEnter",
+  config = function()
+    require("copilot").setup({
+      panel = { enabled = false }, -- no side panel
+      suggestion = {
+        enabled = true,
+        auto_trigger = false,       -- 🔒 DO NOT auto-popup
+        debounce = 75,
+        keymap = {
+          accept = "<C-j>",
+          accept_word = "<M-w>",
+          accept_line = "<M-l>",
+          next = "<C-]>",
+          prev = "<C-k>",
+          dismiss = "<C-/>",
+        },
+      },
+    })
+
+-- Manual trigger (works with old/new copilot.lua)
+vim.keymap.set("i", "<C-l>", function()
+  local ok, s = pcall(require, "copilot.suggestion")
+  if not ok then return end
+
+  -- prefer real trigger if available
+  if type(s.trigger) == "function" then
+    pcall(s.dismiss)
+    return s.trigger()
+  end
+
+  -- Fallback: briefly enable auto_trigger to force a suggestion
+  pcall(s.dismiss)
+  --pcall(s.toggle_auto_trigger)
+
+  -- nudge completion (insert + backspace)
+  local bs = vim.api.nvim_replace_termcodes("<BS>", true, false, true)
+  vim.api.nvim_feedkeys(" ", "n", false)
+  vim.api.nvim_feedkeys(bs, "n", false)
+
+  -- turn auto_trigger back off shortly
+  vim.defer_fn(function() pcall(s.toggle_auto_trigger) end, 200)
+end, { desc = "Copilot: trigger suggestion", silent = true })
+
+    -- Optional: quick toggle of auto-trigger if you ever want it back temporarily
+    vim.keymap.set("n", "<leader>ct", function()
+      require("copilot.suggestion").toggle_auto_trigger()
+    end, { desc = "Copilot: toggle auto-trigger" })
+  end,
 }
+
 
 })
 
@@ -228,3 +279,5 @@ vim.api.nvim_create_autocmd({ "VimEnter" }, {
     end
   end
 })
+
+
