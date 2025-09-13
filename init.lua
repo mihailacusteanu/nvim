@@ -263,9 +263,7 @@ end, { desc = "Copilot: trigger suggestion", silent = true })
       require("copilot.suggestion").toggle_auto_trigger()
     end, { desc = "Copilot: toggle auto-trigger" })
   end,
-}
-
-
+},
 })
 
 vim.api.nvim_create_autocmd({ "VimEnter" }, {
