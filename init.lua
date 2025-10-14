@@ -1,6 +1,9 @@
 vim.g.mapleader = " "
 vim.g.maplocalleader = ","
 
+-- Add asdf Node.js bin to PATH for formatters
+vim.env.PATH = vim.env.PATH .. ":/Users/mihai/.asdf/installs/nodejs/24.7.0/bin"
+
 -- Line numbers
 vim.opt.number = true
 vim.opt.relativenumber = true
@@ -23,7 +26,7 @@ require("lazy").setup({
   { "williamboman/mason.nvim", config = true },
   { "williamboman/mason-lspconfig.nvim", config = function()
       require("mason-lspconfig").setup({
-        ensure_installed = { "elixirls", "pyright", "ruff", "ts_ls", "eslint", "tailwindcss" }, -- elixir + python
+        ensure_installed = { "elixirls", "pyright", "ruff", "ts_ls", "eslint", "tailwindcss", "emmet_ls", "gopls" }, -- ⬅️ emmet_ls kept
       })
     end
   },
@@ -35,6 +38,19 @@ require("lazy").setup({
       require("python_ls")   -- ~/.config/nvim/lua/python_ls.lua
       require("javascript_ls")
       require("tailwind_ls") -- ~/.config/nvim/lua/tailwind_ls.lua
+      require("go_ls")
+
+      -- Emmet via LSP (for .space-y-6 → <div class="space-y-6"></div>)
+      local lspconfig = require("lspconfig")
+      local capabilities = require("cmp_nvim_lsp").default_capabilities()
+      lspconfig.emmet_ls.setup({
+        capabilities = capabilities,
+        filetypes = {
+          "html", "css", "sass", "scss", "less",
+          "javascriptreact", "typescriptreact",
+          "javascript", "typescript",
+        },
+      })
     end
   },
 
@@ -44,11 +60,18 @@ require("lazy").setup({
     config = function()
       require("nvim-treesitter.configs").setup({
         ensure_installed = { "elixir", "eex", "heex", "lua", "vim", "python",
-		"javascript", "typescript", "tsx", "json", "css", "html"
-				},
+	"javascript", "typescript", "tsx", "json", "css", "html", "go"
+			},
         highlight = { enable = true },
         indent    = { enable = true },
       })
+    end
+  },
+
+  -- ⬅️ NEW: Auto-close/rename HTML & JSX/TSX tags
+  { "windwp/nvim-ts-autotag",
+    config = function()
+      require("nvim-ts-autotag").setup()
     end
   },
 
@@ -60,6 +83,7 @@ require("lazy").setup({
     "hrsh7th/cmp-path",
     "L3MON4D3/LuaSnip",              -- snippet engine
     "rafamadriz/friendly-snippets",  -- pre-made snippets (React, etc.)
+    "saadparwaiz1/cmp_luasnip",      -- connect LuaSnip to nvim-cmp
   },
   config = function()
     local cmp = require("cmp")
@@ -131,7 +155,7 @@ require("lazy").setup({
       })
 
       vim.keymap.set("n", "<C-n>", function()
---        require("nvim-tree.api").tree.toggle()
+        require("nvim-tree.api").tree.toggle()
       end, { noremap = true, silent = true, desc = "Toggle file tree" })
     end
   },
@@ -194,18 +218,24 @@ require("lazy").setup({
     require("nvim-autopairs").setup({})
   end
 },
+
 	{ "stevearc/conform.nvim",
   config = function()
     require("conform").setup({
       formatters_by_ft = {
-        javascript = { "prettier" },
-        typescript = { "prettier" },
-        javascriptreact = { "prettier" },
-        typescriptreact = { "prettier" },
-        json = { "prettier" },
-        css = { "prettier" },
-        html = { "prettier" },
+        javascript = { "prettierd", "prettier" },
+        typescript = { "prettierd", "prettier" },
+        javascriptreact = { "prettierd", "prettier" },
+        typescriptreact = { "prettierd", "prettier" },
+        json = { "prettierd", "prettier" },
+        css = { "prettierd", "prettier" },
+        html = { "prettierd", "prettier" },
+	go = { "goimports", "gofmt" },  
       },
+      -- Save-time fallback (still lets you use LSP formatting if no formatter is available)
+      format_on_save = function(_)
+        return { lsp_fallback = true, timeout_ms = 500 }
+      end,
     })
 
     vim.keymap.set("n", "<leader>f", function()
@@ -213,69 +243,66 @@ require("lazy").setup({
     end, { desc = "Format buffer" })
   end
 },
-	{
-  "zbirenbaum/copilot.lua",
-  event = "InsertEnter",
-  config = function()
-    require("copilot").setup({
-      panel = { enabled = false }, -- no side panel
-      suggestion = {
-        enabled = true,
-        auto_trigger = false,       -- 🔒 DO NOT auto-popup
-        debounce = 75,
-        keymap = {
-          accept = "<C-j>",
-          accept_word = "<M-w>",
-          accept_line = "<M-l>",
-          next = "<C-]>",
-          prev = "<C-k>",
-          dismiss = "<C-/>",
-        },
-      },
-    })
-
--- Manual trigger (works with old/new copilot.lua)
-vim.keymap.set("i", "<C-l>", function()
-  local ok, s = pcall(require, "copilot.suggestion")
-  if not ok then return end
-
-  -- prefer real trigger if available
-  if type(s.trigger) == "function" then
-    pcall(s.dismiss)
-    return s.trigger()
-  end
-
-  -- Fallback: briefly enable auto_trigger to force a suggestion
-  pcall(s.dismiss)
-  --pcall(s.toggle_auto_trigger)
-
-  -- nudge completion (insert + backspace)
-  local bs = vim.api.nvim_replace_termcodes("<BS>", true, false, true)
-  vim.api.nvim_feedkeys(" ", "n", false)
-  vim.api.nvim_feedkeys(bs, "n", false)
-
-  -- turn auto_trigger back off shortly
-  vim.defer_fn(function() pcall(s.toggle_auto_trigger) end, 200)
-end, { desc = "Copilot: trigger suggestion", silent = true })
-
-    -- Optional: quick toggle of auto-trigger if you ever want it back temporarily
-    vim.keymap.set("n", "<leader>ct", function()
-      require("copilot.suggestion").toggle_auto_trigger()
-    end, { desc = "Copilot: toggle auto-trigger" })
-  end,
-},
+-- Copilot disabled to avoid subscription warnings
+-- {
+--   "zbirenbaum/copilot.lua",
+--   event = "InsertEnter",
+--   config = function()
+--     require("copilot").setup({
+--       panel = { enabled = false }, -- no side panel
+--       suggestion = {
+--         enabled = true,
+--         auto_trigger = false,       -- 🔒 DO NOT auto-popup
+--         debounce = 75,
+--         keymap = {
+--           accept = "<C-j>",
+--           accept_word = "<M-w>",
+--           accept_line = "<M-l>",
+--           next = "<C-]>",
+--           prev = "<C-k>",
+--           dismiss = "<C-/>",
+--         },
+--       },
+--     })
+--   end,
+-- },
 })
 
-vim.api.nvim_create_autocmd({ "VimEnter" }, {
-  callback = function(data)
-    local directory = vim.fn.isdirectory(data.file) == 1
-    if directory then
-      vim.cmd.cd(data.file)
-      require("nvim-tree.api").tree.open()
-    else
-      require("nvim-tree.api").tree.open()
-    end
-  end
-})
+-- vim.api.nvim_create_autocmd({ "VimEnter" }, {
+--   callback = function(data)
+--     local directory = vim.fn.isdirectory(data.file) == 1
+--     if directory then
+--       vim.cmd.cd(data.file)
+--       require("nvim-tree.api").tree.open()
+--     else
+--       require("nvim-tree.api").tree.open()
+--     end
+--   end
+-- })
 
+-- 🔹 Custom command: ReplaceAll (search & replace across project)
+vim.api.nvim_create_user_command("ReplaceAll", function(opts)
+  local old = opts.fargs[1]
+  local new = opts.fargs[2]
+
+  if not old or not new then
+    print("Usage: :ReplaceAll <old> <new>")
+    return
+  end
+
+  vim.cmd("vimgrep /" .. old .. "/ **/*.ex **/*.exs")
+  vim.cmd("cfdo %s/" .. old .. "/" .. new .. "/gc | update")
+end, { nargs = "+" })
+
+
+-- Copy diagnostic under cursor to clipboard
+vim.keymap.set("n", "<leader>ce", function()
+  local diagnostics = vim.diagnostic.get(0, { lnum = vim.fn.line(".") - 1 })
+  if diagnostics[1] then
+    vim.fn.setreg("+", diagnostics[1].message) -- copy to system clipboard
+    print("Copied diagnostic: " .. diagnostics[1].message)
+  else
+    print("No diagnostic on this line")
+  end
+end, { desc = "Copy diagnostic message" })
 
